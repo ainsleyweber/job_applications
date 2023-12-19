@@ -1,0 +1,330 @@
+---
+title: "S&DS 230 Final Report"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+subtitle: Capital Flows in the Global Financial Crisis, 2007-2009  
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# **Section I: Introduction**
+
+Among low- to medium-income countries, a tendency to rely on foreign credit can lead to big problems when market sentiment sours. As observed in the 1994 Mexican Tequila Crisis and 1997/98 Asian Financial Crisis, a “sudden stop” in foreign capital inflows can trigger larger, deleterious outcomes in the wider economy (Calvo, 1998). Even after scary bad news stems the inflow of funds, the stoppage itself can amplify the initial effects of the bad news by cutting off vital funding sources. When funding begins to dry up, the country can raise interest rates in attempt to draw capital back, but this move can push a previously solvent balance sheet into insolvency if rates go too high (Calvo, 1998). This report will examine country GDP growth through the 2007/08 Global Financial Crisis in light of the sudden stop phenomenon and the problems from overly relying on foreign credit. Specifically, it will examine if an overreliance on foreign capital leading up to the crisis is associated with worse GDP growth by 2009. Using data on debt and equity flows in about 200 countries between 2007 and 2009, it studies the relationship between inflows and outflows, as well as their ability to predict the magnitude of an individual country’s economic downturn in that period. 
+
+
+# **Section II: Data and Variable Description**
+
+* `countryname_wb` Country name
+* `annual_ygr10wb` GDP growth per capita, reported in %, normalized to GDP per capita levels in 2010 USD   
+* `annual_FinA2y_ifs` Financial account balance as a percent of GDP, where (+) = borrowing from abroad more than lending and (-) = lending abroad more than borrowing
+* `annual_EqtInF2y_ifs` Total of FDI and portfolio equity inflows as a percent of GDP, (+) = investment from abroad, (-) = foreigners withdrawing credit
+* `annual_EqtOutF2y_ifs` Total of FDI and portfolio equity outflows as a percent of GDP, (-) = investment in foreign assets, (+) = selling foreign assets
+* `annual_PEqtInF2y_ifs` Portfolio equity inflows as a percent of GDP, (+) = investment from abroad, (-) = foreigners withdrawing credit
+* `annual_PEqtOutF2y_ifs` Portfolio equity outflows as a percent of GDP, (-) = investment in foreign assets, (+) = selling foreign assets
+* `annual_TDebtInF2y_ifs` Total debt inflows as a percent of GDP, (+) = lending from abroad, (-) = foreigners withdrawing credit 
+* `annual_TDebtOutF2y_ifs` Total debt outflows as a percent of GDP, (-) = investment in foreign debt, (+) = selling foreign debt
+* `annual_AllPrivflow2y_ifs` Total equity and debt from private sources as a percent of GDP, (+) = borrowing from abroad more than lending abroad
+
+*Note: Variables with `.x` at the end indicate data from 2007; variables with `.y` at the end indicate data from 2008, and variables with no market indicate data from 2009*
+
+
+# **Section III: Data Cleaning Process**
+
+```{r, echo=FALSE}
+setwd("~/Desktop/S&DS 230")
+library(haven)
+akv <- read_dta('akv.dta')
+```
+
+## Cleaning Year and Country Data 
+
+My cleaning process began by creating `df2` which limited the original `akv` dataset to my variables of interest. Then, in order to change the formatting from one year per line to one country per line and limit the data to the years of interest (2007-2009), I created three new data frames, each restricted to one of the listed years. Next I merged these data frames by `countryname_wb` to create `yrcombine2. Lastly, I removed Luxembourg as a significant outlier that did not exhibit the phenomenon I try to study. As a small, open, high-income economy, it saw capital inflows north of 800% of its GDP in the years studied. However, these inflows did not contribute to an overheating of the economy as they did elsewhere in Europe; instead they are rather par for the course in Luxembourg. Therefore, I remove Luxembourg so as not to limit following plots from providing more intelligible information. 
+
+The resulting data frame `yrcombin2` had one country per row, with separate columns for each variable of interest depending on year. As noted above, variables with `.x` at the end indicate data from 2007; variables with `.y` at the end indicate data from 2008, and variables with no market indicate data from 2009.
+```{r, echo = F}
+df2  <- akv[, c("year", "countryname_wb", "RICHOECD", "LARGEREGION", "annual_ygr10wb", "annual_GDP", "annual_EqtInF2y_ifs", "annual_EqtOutF2y_ifs", "annual_PEqtInF2y_ifs", "annual_PEqtNetF2y_ifs", "annual_TDebtInF2y_ifs", "annual_TDebtOutF2y_ifs", "annual_AllPrivflow2y_ifs")]
+
+
+#Make yrcombine2 and remove Luxembourg
+yr2007a <- df2[(df2$year == 2007),] #2007 data
+yr2008a <- df2[(df2$year == 2008),] #2008 data
+yr2009a <- df2[(df2$year == 2009),] #2009 data
+
+yrcombine2 <- merge(yr2007a, yr2008a, by = 'countryname_wb') # Merge data frames
+yrcombine2 <- merge(yrcombine2, yr2009a, by = 'countryname_wb')
+
+yrcombine2 <- yrcombine2[!yrcombine2$countryname_wb == "Luxembourg",] #Remove Luxembourg 
+```
+
+## Further Cleaning
+
+Beyond the limiting and reformatting by country, the data cleaning process varied depending on the variable of interest. I opted for this technique in order to preserve as many observations as possible in each level of analysis. This included removing `NA`s when calculating differences in means during permutation tests, removing `NA`s under the `RICHOECD` variable when testing the effect of this status on GDP growth, and removing them under the `LARGEREGION` variable in order to construct boxplots.
+
+When calculating correlation for the scatterplot between equity inflows in 2007 and growth in 2009, I restrict the third plot to countries with positive net inflows in order to understand the relationship between net borrower countries and their growth two years later. 
+
+Finally, after seeing that the first pass at multiple regression somewhat violates normality assumptions, I attempt to run a box-cox transformation on the outcome variable, GDP growth in 2009. However, because some countries experience negative growth in 2009, I cannot run the transformation as it. To address this problem, I calculate the lower bound of country growth (a little over -15), round up, and add 16 to each outcome variable. As I am interested in how capital flows are associated with the *change* in GDP growth, this adjustment will minimally impact my findings. Then I am able to proceed calculating the box-cox transformation in Section V. 
+
+
+# **Section IV: Descriptive Plots and Summary Information**
+
+## Histograms of GDP Growth
+
+```{r, echo=FALSE}
+hist(yrcombine2$annual_ygr10wb.x, main = "Histogram of GDP Country Growth 2007", xlab = "GDP Growth", breaks = 30, co = "brown")
+```
+
+```{r, echo=F}
+hist(yrcombine2$annual_ygr10wb.y, main = "Histogram of GDP Country Growth 2008", xlab = "GDP Growth", breaks = 30, co = "brown")
+```
+
+```{r, echo=F}
+hist(yrcombine2$annual_ygr10wb, main = "Histogram of GDP Country Growth 2009", xlab = "GDP Growth, %", breaks = 30, co = "brown")
+```
+
+First we see that GDP growth in all three years is roughly normally distributed, but with more countries shifting closer to negative growth in 2008 and then again in 2009. Although the crisis really began in the US in 2007, it did not spread to other countries, particularly those under stress in Europe, till the following years.
+
+## T-Test and Permutation Test
+
+To get a better understanding of the nature of the GFC's impact, we might also examine if the crisis affected high-income and developing countries differently. The below t-test tests if growth in 2008 was statistically significantly different between Rich OECD countries and countries that did not fall in that category. I complement the t-test with a permutation test to check the initial findings.
+```{r, echo=F}
+No_na <- yrcombine2[yrcombine2$RICHOECD.x != "NA",]
+(growth_test <- t.test(No_na$annual_ygr10wb.y ~ No_na$RICHOECD.y)) 
+parm_ci <- growth_test$conf.int[1:2]
+#yes, GDP was statistically significantly different between rich OECD countries and others; yes, normally distributed and centered around the mean
+```
+
+```{r, echo=F}
+# Permutation Test
+attach(yrcombine2)
+(actualdiff <- by(annual_ygr10wb.y, RICHOECD.y, mean, na.rm = T))
+(actualdiff <- actualdiff[1] - actualdiff[2])
+
+#Step 2: Create fake data
+fakeRich <- sample(RICHOECD.y)
+N <- 10000
+diffvals <- rep(NA, N)
+
+for (i in 1:N) {
+  fakeRich <- sample(RICHOECD.y)  # default is replace = FALSE #first create fake agre groups with random reordering
+  diffvals[i] <- mean(annual_ygr10wb.y[fakeRich == 1], na.rm = T) -  mean(annual_ygr10wb.y[fakeRich == 0], na.rm = T) #then calculate the difference in means for this version of the sample means
+}
+
+#Step 3: Make histogram
+#Make histogram of permuted mean differences
+hist(diffvals, col = "brown", main = "Permuted Sample Means Diff in Growth", xlab = "Growth 2008", breaks = 50, 
+     xlim = c(-4,3))
+abline(v = actualdiff, col = "blue", lwd = 3)
+text(actualdiff - 0.2, 350 , paste("Actual Diff in Means =", round(actualdiff,2)),srt = 90)
+```
+
+From both the parametric and permutation test above, it appears that Rich OECD countries did experience lower growth in 2008 than countries not under that designation.
+
+
+## Bootstrap Confidence Interval
+
+We can also check the parametric confidence interval with a bootstrapped confidence interval.
+
+```{r, echo=F}
+No_na <- yrcombine2[yrcombine2$RICHOECD.x != "NA",] #Eliminate NAs
+diff_gr <- rep(NA, N)
+for (i in 1:N) {
+  sR <- sample(No_na$annual_ygr10wb.y[No_na$RICHOECD.x == 1], 22, replace = T)
+  sNR <- sample(No_na$annual_ygr10wb.y[No_na$RICHOECD.x == 0], 193, replace = T)
+  diff_gr[i] <- mean(sNR, na.rm = T) - mean(sR, na.rm = T)
+}
+boot_ci <- quantile(diff_gr, c(0.025, 0.975))
+
+hist(diff_gr, col = "blue", breaks = 50, main = "Bootstrapped Sample Mean Diff in Growth, 2008", xlab = "Diff in GDP Growth between Rich OECD countries and others")
+abline(v = boot_ci, lwd = 3, col = "brown")
+abline(v = parm_ci, lwd = 3, col = "chartreuse3", lty = 3)
+legend("topright", c(500, 700), c("Original CI", "Boot CI"), col = c("chartreuse3", "brown"), lwd = 3, lty = c(2,1))
+```
+
+Again, we see that both the parametric and bootstrap confidence intervals indicate that Rich OECD countries saw GDP growth per capita about 2.2 to 4.2 percentage points below that that of countries not in that category.
+
+
+## Boxplots by Region
+
+**FDI and Portfolio Equity Inflows as % of GDP**
+```{r, echo=FALSE}
+library(car)
+by_region <- akv[!akv$LARGEREGION == "NA",] # Get rid of NA to examine by region
+by_region <- by_region[by_region$year == "2007",] # Restrict to 2007
+
+Boxplot(by_region$annual_EqtInF2y_ifs ~ by_region$LARGEREGION, cex.axis = .75, col = "chartreuse3", main = "FDI and Portfolio Equity Inflows as % of GDP", xlab = "Region", ylab = "Equity Inflows, % of GDP, 2007")
+```
+
+Above we see equity inflows as a percentage of GDP for 2007, comprising both FDI and portfolio equity, which include investments into company shares and stock participation. The plot divides countries by region, except for Rich OECD countries, which the data place into a separate category. Notably, we see Asian countries relying less on foreign equity compared to European and Latin American counterparts. We also see extreme outliers in the Rich OECD countries, which include Ireland, point 87,with inflows approaching 60% of theirs GDP in 2007, and Iceland, point 90, with equity inflows over 30% of their GDP. These countries proceeded to suffer severe banking and currency crises in the aftermath of the Eurozone crisis, triggered by the GFC and amplified by the severe over-leveraging we see above.
+
+**Financial Account Balance by Region**
+```{r, echo = F}
+Boxplot(by_region$annual_AllPrivflow2y_ifs ~ by_region$LARGEREGION, cex.axis = .75, col = "chartreuse3", main = "Financial Account Balance by Region", xlab = "Region", ylab = "Financial Account Balance, % of GDP, 2007")
+```
+
+More generally, the above plot shows the size of the financial account as a percentage of GDP by region. A larger positive number means the country is a net borrower, and a larger negative number indicates it is a net lender. As expected, we see Asian countries falling towards the lower end, as many are very adverse to borrowing after the 1997/98 Asian Financial Crisis. In contrast, we see European and central Asian countries net borrowing in the region approaching 40 and 50% of their GDP. Countries falling under Rich OECD did not report this data.    
+
+## Equity Inflows 2007 to GDP Growth 2008, 2009
+
+```{r, echo = F}
+plot(yrcombine2$annual_EqtInF2y_ifs.x[yrcombine2$annual_EqtInF2y_ifs.x < 800], yrcombine2$annual_ygr10wb.y[yrcombine2$annual_EqtInF2y_ifs.x < 800], main = "GDP Growth 2008 to Equity Inflows 2007", xlab = "Equity inflows as percentage of GDP 2007", ylab = "GDP Growth per Capita, 2008", col = "blue", pch = 16, las = 2, cex = .8)
+```
+
+```{r, echo=F}
+plot(yrcombine2$annual_EqtInF2y_ifs.x[yrcombine2$annual_EqtInF2y_ifs.x < 800], yrcombine2$annual_ygr10wb[yrcombine2$annual_EqtInF2y_ifs.x < 800], main = "GDP Growth 2009 to Equity Inflows 2007", xlab = "Equity inflows as percentage of GDP 2007", ylab = "GDP growth per capita, 2009", col = "blue", pch = 16, las = 2, cex = .8)
+```
+
+To roughly estimate a relationship between foreign equity inflows and GDP outcomes after the financial crisis, here we examine how equity inflows in 2007 relate to GDP growth in 2008 and 2009. In 2007, countries like Ireland would still have been experiencing strong equity inflows, which helped to artificially prop up its economy. In the case of Ireland, the majority of these inflows were not the more reliable, long-term FDI. These investments could been withdrawn more easily, which likely contributes to countries with high equity inflows in 2007 experiencing worse economic growth on the other side of the crisis in 2009. Especially as we move away from lower levels of equity inflows, a negative relationship begins to emerge between 2007 inflows and GDP growth in 2008/9. 
+
+### Correlation Test
+```{r, echo = F}
+(sigcortest <- cor.test(annual_EqtInF2y_ifs.x, annual_ygr10wb.y, data = yrcombine2))
+```
+
+```{r, echo=F}
+(sigcortest <- cor.test(annual_EqtInF2y_ifs.x, annual_ygr10wb, data = yrcombine2))
+```
+
+The correlation test shows a statistically insignificant correlation between equity inflows in 2007 and GDP growth in 2008, but it does show a significant, albeit weak, negative correlation between these 2007 inflows and growth in 2009.
+
+### Restricted Plot
+
+```{r, echo = F}
+pos_in_07 <- yrcombine2$annual_EqtInF2y_ifs.x[yrcombine2$annual_EqtInF2y_ifs.x > -1]
+GDP_cor_07 <- yrcombine2$annual_ygr10wb[yrcombine2$annual_EqtInF2y_ifs.x > -1]
+
+plot(yrcombine2$annual_EqtInF2y_ifs.x[yrcombine2$annual_EqtInF2y_ifs.x > -1], yrcombine2$annual_ygr10wb[yrcombine2$annual_EqtInF2y_ifs.x > -1], xlab = "Equity inflows as percentage of GDP 2007", ylab = "GDP growth per capita, 2009", col = "blue", pch = 16, las = 2, cex = .8)
+title("GDP Growth 2009 to Equity Inflows 2007", line = 1)
+mtext(paste("Correlation = ", round(cor(pos_in_07, GDP_cor_07, use = "complete.obs"), 2)), side = 3)
+```
+
+Here I try restricting the above sample to countries solely experiencing more foreigners buying domestic assets, rather than more foreigners selling domestic assets, in 2007; in other words, countries experiencing a positive net inflow of capital. Here, I restrict the sample to equity inflows greater than -1%. Although we only see a weak negative correlation of -0.18, this makes sense as low levels of inflow did not necessarily help growth once crisis struck, but high levels of inflow could make it harder to recover once crisis hit and those inflows dried up.
+
+
+# **Section V: Analysis**
+
+The majority of my analysis will examine the ability of capital flows to predict the severity of a country's GDP downturn following the GFC
+
+## Multiple Regression Analysis on Variables of Interest
+
+Using best subsets regression, I attempt to determine the significant predictors of 2009 GDP growth per capita. I use a variety of capital flow measures in addition to controls for GDP per capita growth in 2007 and 2008. Model 1 shows the initial model.
+
+### Model 1
+```{r, echo=F}
+library(leaps)
+
+mod1 <- regsubsets(annual_ygr10wb ~ annual_PEqtInF2y_ifs.x + annual_PEqtInF2y_ifs.y + annual_PEqtInF2y_ifs.y + annual_EqtInF2y_ifs.x + annual_EqtOutF2y_ifs.x +annual_TDebtInF2y_ifs.x + annual_TDebtOutF2y_ifs.x + annual_EqtInF2y_ifs.y + annual_EqtOutF2y_ifs.y + annual_TDebtInF2y_ifs.y + annual_TDebtOutF2y_ifs.y + annual_AllPrivflow2y_ifs.x + annual_AllPrivflow2y_ifs.y + annual_ygr10wb.x + annual_ygr10wb.y, data = yrcombine2, nvmax = 12)
+```
+
+#### "Which" Matrix
+```{r, echo = F} 
+(mod1sum <- summary(mod1))
+```
+
+The "which" matrix above helps begin to determine which variables from our 2007 and 2008 capital flows best predict 2009 GDP per capita growth.
+
+The Bayesian Information Criteria indicates that four variables will give us our best model.
+```{r}
+(BestBIC <- which.min(summary(mod1)$bic))
+```
+
+#### Bayesian Information Criteria Best Subset Regression
+
+After determining the best model to estimate, we fit Model 2 below using the Bayesian Information Criteria. 
+
+### Model 2
+```{r, echo=F}
+mod_bic <- lm(annual_ygr10wb ~ annual_AllPrivflow2y_ifs.x + annual_TDebtInF2y_ifs.y + annual_TDebtOutF2y_ifs.y + annual_ygr10wb.y, data = yrcombine2)
+summary(mod_bic)
+```
+
+Model 2 shows that a one percentage point increase in all net private capital flows (as a % of GDP) in 2007 is associated with a 0.15% decrease in 2009 GDP growth. The coefficient is highly significant at an alpha level of 0.0001. The other predictors also prove significant, with increases in debt inflows in 2008 associated with lower GDP growth the next year at a 0.01 alpha level. Together, these two coefficients suggest that higher levels of foreign capital coming into a country are associated with lower growth immediately following the crisis.
+
+Since larger negative numbers indicate greater amounts of debt loaned abroad, we can interpret the positive association between debt outflow in 2008 and GDP growth in 2009 to mean that lower levels of domestic lending to foreign countries was associated with higher growth. Here, this coefficient is significant at 0.05 alpha level.
+
+It is unsurprising that GDP growth in the year prior shows a positive association with GDP growth in 2009 at a 0.01 alpha level.
+
+Lastly, the model demonstrates significant predictive power, with an adjusted r-squared of about 0.28, indicating that net private capital flows, debt flows, and year prior growth are associated with GDP growth later on. 
+
+#### Residual plots to check assumptions
+
+The following normal quantile plot and residual plot help us check the model assumptions. We see from the normal quantile plot that the BIC model does not quite meet our assumption of normally distributed residuals. It also displays some heteroskedasticity. To address these violations, I attempt a box-cox transformation below.
+```{r, echo = F}
+source("http://www.reuningscherer.net/s&ds230/Rfuncs/regJDRS.txt")
+myResPlots2(mod_bic)
+```
+
+### Model 3
+
+To run a box-cox transformation, the outcome variable, here 2009 GDP growth per capita, must be strictly positive. However, many countries displayed negative growth (the whole premise of this report). To address this failure, I find the lower bound of GDP growth and add that constant to the 2009 growth variable to ensure all observations are positive. This initial transformation works because I am interested in how much *less* GDP growth a country experienced compared to another, rather than how much it grew in absolute terms.
+
+First I calculate the lower bound of GDP growth per capita, round that number to the next highest integer, and add the resulting constant to my outcome variable, `annual_ygr10wb`.
+```{r}
+min(yrcombine2$annual_ygr10wb, na.rm = T) #Calculate minimum
+
+yrcombine2$growth_trans <- yrcombine2$annual_ygr10wb + 16 #Transform variable
+```
+
+Then I run the new regression in order to determine a box-cox transformation.
+```{r, echo = F}
+mod_bic2 <- lm(growth_trans ~ annual_AllPrivflow2y_ifs.x + annual_TDebtInF2y_ifs.y + annual_TDebtOutF2y_ifs.y + annual_ygr10wb.y, data = yrcombine2) #Run new regression
+summary(mod_bic2)
+
+# Box-cox transformation
+trans1 <- boxCox(mod_bic2)
+trans1$x[which.max(trans1$y)]
+```
+
+I round the above number to 1.4 to apply as the transformation.
+
+
+### Box-Cox Transformation
+```{r, echo = F}
+mod3 <- lm(growth_trans^1.4 ~ annual_AllPrivflow2y_ifs.x + annual_TDebtInF2y_ifs.y + annual_TDebtOutF2y_ifs.y + annual_ygr10wb.y, data = yrcombine2)
+summary(mod3)
+```
+
+After the transformation, the model shows that 2007 net private capital flows are negatively and highly statistically significantly associated with 2009 GDP growth per capita; however, we cannot extrapolate much beyond direction, as the transformation impacts our interpretation of coefficient magnitude. 
+
+Again, the model has a fairly high adjusted r-squared of 0.28, especially considering the many factors associated with GDP growth.  
+
+#### Residual plots to check assumptions
+
+Finally, we see below that the residuals for this model are approximately normally distributed. It still shows some heteroskedasticity, but the model is improved from the previous.
+```{r, echo = F}
+myResPlots2(mod3)
+```
+
+
+## Logistic Regression to Predict Negative GDP Growth
+
+The final model inspects if we can use capital flows to predict whether GDP growth per capita is simply positive or negative. To do so, we construct a binary variable that takes the value of 1 if growth in the year of interest is negative and 0 if positive. We construct this variable for 2008 and 2009.  
+```{r, echo = F}
+yrcombine2$GDP_neg.y <- ifelse(yrcombine2$annual_ygr10wb.y < 0, 1, 0) #Construct negative GDP growth variable for 2008, 1 = growth over last year was negative
+
+yrcombine2$GDP_neg <- ifelse(yrcombine2$annual_ygr10wb < 0, 1, 0) #Construct negative GDP growth variable for 2009, 1 = growth over last year was negative
+```
+
+After constructing the variable, we do the following logistic regression. We will first try using the same variables as above. 
+```{r, echo = F}
+library(questionr)
+Log1 <- glm(GDP_neg ~ annual_AllPrivflow2y_ifs.x + annual_TDebtInF2y_ifs.y + annual_TDebtOutF2y_ifs.y + annual_ygr10wb.y, data = yrcombine2, family = binomial)
+summary(Log1)
+odds.ratio(Log1)
+```
+The above model again shows that net private capital flows from 2007 serve as a strong predictor of GDP growth in 2009. Specifically, larger net private flows are associated with increasing the probability of GDP growth becoming negative two years later. We can use the odds ratio to interpret the results: for every percentage point net private capital flows increase as a percent of GDP in 2007, the odds of that country experiencing negative GDP growth in 2009 increase about 1.08 times. 
+
+Debt inflows in 2008 also prove a statistically significant predictor in the logistic model, with a one percentage point increase in total debt inflows (as a % of GDP) in 2008 associated with the odds of negative GDP growth in 2009. The finding is highly significant at an alpha level of 0.01.
+
+
+# **Section VI: Conclusion**
+
+The final results portray a summary of the Global Financial Crisis consistent with previous findings as well as theoretical predictions outlined by papers like Calvo (1998). We saw that leading up to the crisis, countries in Asia did appear to limit their capital flows compared to other regions. From our t-test and permutation test, we see that the crisis hit rich OECD countries the hardest. Lastly, the regression results indicate a negative relationship between private capital flows in 2007 and GDP growth per capita in 2009. 2008 debt inflows were also statistically significant predictors of GDP growth the following year, with larger inflows associated with lower growth. Lending in 2008 actually appeared associated with better growth the following year. However, this perhaps indicates that those countries that had the capacity to still lend in 2008 were also likely to be doing better already. Taken together, these findings reinforce the proposition that excess capital flows, especially compared to a country's GDP, contribute to overheating that make downturns more painful.
+
+Of course, cross-sectional data is not ideal to study this phenomenon, as many other country-specific factors contribute to GDP growth and economic outcomes following an economic crisis. In examining capital inflows, restricting to portfolio equity (as opposed to portfolio equity + FDI) would give a better indication of the impact of easily-exited investment positions on GDP growth. Indeed, it is shorter-term investments like these that cause sudden-stops to occur. However, our BIC model did not suggest portfolio equity as a significant predictor, although further inspection and limiting outliers would probably yield a go-around. Lastly, the dataset only provides information on net capital inflows and outflows; instead, gross flows would likely present a more comprehensive picture of overheating that took place leading up to the crisis.
+
+
+
